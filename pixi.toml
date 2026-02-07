@@ -1,0 +1,10 @@
+[workspace]
+authors = ["Yuhao Chen <hello@chenyuhao.me>"]
+channels = ["conda-forge"]
+name = "ChessNGen"
+platforms = ["linux-64"]
+version = "0.1.0"
+
+[tasks]
+
+[dependencies]
