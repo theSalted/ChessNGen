@@ -95,11 +95,14 @@
 		};
 	}
 
-	async function loadImageData(ctx: CanvasRenderingContext2D, b64: string): Promise<Uint8Array> {
+	async function loadImage(b64: string): Promise<HTMLImageElement> {
 		const img = new Image();
 		img.src = `data:image/png;base64,${b64}`;
 		await new Promise((resolve) => (img.onload = resolve));
-		ctx.drawImage(img, 0, 0, 256, 256);
+		return img;
+	}
+
+	function grabPixels(ctx: CanvasRenderingContext2D): Uint8Array {
 		return new Uint8Array(ctx.getImageData(0, 0, 256, 256).data.buffer);
 	}
 
@@ -113,18 +116,27 @@
 		const ctx = canvas.getContext('2d')!;
 
 		const gifFrames = [];
-		for (let i = 0; i < frames.length; i++) {
+		for (let i = 4; i <= currentFrame; i++) {
 			if (includePartials) {
 				const partialIdx = i - 4;
 				if (partialIdx >= 0 && partialIdx < partialHistory.length) {
+					const prevImg = await loadImage(frames[i - 1]);
 					for (const b64 of partialHistory[partialIdx]) {
-						const imageData = await loadImageData(ctx, b64);
-						gifFrames.push({ data: imageData, delay: 100 });
+						const partialImg = await loadImage(b64);
+						// Draw previous frame, then overlay partial at 50%
+						ctx.globalAlpha = 1.0;
+						ctx.drawImage(prevImg, 0, 0, 256, 256);
+						ctx.globalAlpha = 0.5;
+						ctx.drawImage(partialImg, 0, 0, 256, 256);
+						ctx.globalAlpha = 1.0;
+						gifFrames.push({ data: grabPixels(ctx), delay: 100 });
 					}
 				}
 			}
-			const imageData = await loadImageData(ctx, frames[i]);
-			gifFrames.push({ data: imageData, delay: 500 });
+			const img = await loadImage(frames[i]);
+			ctx.globalAlpha = 1.0;
+			ctx.drawImage(img, 0, 0, 256, 256);
+			gifFrames.push({ data: grabPixels(ctx), delay: 500 });
 		}
 
 		const output = await encode({ width: 256, height: 256, frames: gifFrames as any });
@@ -139,13 +151,6 @@
 
 	let openingMoves = $derived(opening ? opening.split(' ') : []);
 
-	let displaySrc = $derived(
-		stepping && partialFrame
-			? `data:image/png;base64,${partialFrame}`
-			: frames.length > 0
-				? `data:image/png;base64,${frames[currentFrame]}`
-				: null
-	);
 
 
 </script>
@@ -177,9 +182,22 @@
 		>
 			{#if loading}
 				<div class="text-sm animate-pulse" style="color: #b58863;">Loading...</div>
-			{:else if displaySrc}
+			{:else if stepping && partialFrame && frames.length > 0}
 				<img
-					src={displaySrc}
+					src={`data:image/png;base64,${frames[frames.length - 1]}`}
+					alt="Previous frame"
+					class="w-full h-full absolute inset-0"
+					style="image-rendering: pixelated;"
+				/>
+				<img
+					src={`data:image/png;base64,${partialFrame}`}
+					alt="Generating"
+					class="w-full h-full absolute inset-0 opacity-50"
+					style="image-rendering: pixelated;"
+				/>
+			{:else if frames.length > 0}
+				<img
+					src={`data:image/png;base64,${frames[currentFrame]}`}
 					alt="Frame {currentFrame}"
 					class="w-full h-full"
 					style="image-rendering: pixelated;"
@@ -200,7 +218,7 @@
 						bind:value={currentFrame}
 						disabled={stepping}
 						class="themed-slider disabled:opacity-30"
-						style="width: 512px; transform: rotate(-90deg); transform-origin: center center;"
+						style="width: 512px; transform: rotate(90deg); transform-origin: center center;"
 					/>
 				</div>
 				<span class="text-xs tabular-nums" style="color: #b58863;">
