@@ -26,6 +26,7 @@
  * ```
  */
 declare module '$env/static/private' {
+	export const BACKEND_URL: string;
 	export const NVM_RC_VERSION: string;
 	export const CAML_LD_LIBRARY_PATH: string;
 	export const MANPATH: string;
@@ -91,7 +92,6 @@ declare module '$env/static/private' {
 	export const npm_node_execpath: string;
 	export const COLORTERM: string;
 	export const ZELLIJ_SESSION_NAME: string;
-	export const NODE_ENV: string;
 }
 
 /**
@@ -121,6 +121,7 @@ declare module '$env/static/public' {
  */
 declare module '$env/dynamic/private' {
 	export const env: {
+		BACKEND_URL: string;
 		NVM_RC_VERSION: string;
 		CAML_LD_LIBRARY_PATH: string;
 		MANPATH: string;
@@ -186,7 +187,6 @@ declare module '$env/dynamic/private' {
 		npm_node_execpath: string;
 		COLORTERM: string;
 		ZELLIJ_SESSION_NAME: string;
-		NODE_ENV: string;
 		[key: `PUBLIC_${string}`]: undefined;
 		[key: `${string}`]: string | undefined;
 	}

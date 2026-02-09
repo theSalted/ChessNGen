@@ -1,3 +1,11 @@
 {
-	"/": []
+	"/": [
+		"src/routes/+page.server.ts"
+	],
+	"/api/init": [
+		"src/routes/api/init/+server.ts"
+	],
+	"/api/step": [
+		"src/routes/api/step/+server.ts"
+	]
 }

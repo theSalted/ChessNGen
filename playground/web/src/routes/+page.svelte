@@ -1,8 +1,8 @@
 <script lang="ts">
+	import type { PageData } from './$types';
 
+	let { data }: { data: PageData } = $props();
 
-	let mode = $state<'startpos' | 'pgn'>('startpos');
-	let pgn = $state('');
 	let temperature = $state(0.0);
 	let topK = $state(0);
 
@@ -16,10 +16,16 @@
 	let partialFrame = $state<string | null>(null);
 	let includePartials = $state(true);
 
-	const API_URL = 'http://localhost:8000';
-
-	$effect(() => {
-		init();
+	// Initialize from server-loaded data on mount
+	import { onMount } from 'svelte';
+	onMount(() => {
+		if (data.frames.length > 0) {
+			frames = data.frames;
+			currentFrame = frames.length - 1;
+			initialized = true;
+		} else {
+			init();
+		}
 	});
 
 	async function init() {
@@ -31,13 +37,10 @@
 		partialFrame = null;
 
 		try {
-			const res = await fetch(`${API_URL}/api/init`, {
+			const res = await fetch('/api/init', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					mode,
-					pgn: mode === 'pgn' ? pgn : ''
-				})
+				body: JSON.stringify({ mode: 'startpos', pgn: '' })
 			});
 
 			if (!res.ok) {
@@ -68,7 +71,7 @@
 			top_k: topK.toString()
 		});
 
-		const es = new EventSource(`${API_URL}/api/step?${params}`);
+		const es = new EventSource(`/api/step?${params}`);
 
 		es.addEventListener('partial', (e) => {
 			const data = JSON.parse(e.data);
@@ -93,12 +96,12 @@
 		};
 	}
 
-	async function loadImageData(ctx: CanvasRenderingContext2D, b64: string): Promise<Uint8ClampedArray> {
+	async function loadImageData(ctx: CanvasRenderingContext2D, b64: string): Promise<Uint8Array> {
 		const img = new Image();
 		img.src = `data:image/png;base64,${b64}`;
 		await new Promise((resolve) => (img.onload = resolve));
 		ctx.drawImage(img, 0, 0, 256, 256);
-		return ctx.getImageData(0, 0, 256, 256).data;
+		return new Uint8Array(ctx.getImageData(0, 0, 256, 256).data.buffer);
 	}
 
 	async function downloadGif() {
@@ -118,16 +121,16 @@
 				const partialIdx = i - 4; // partialHistory[0] corresponds to frames[4]
 				if (partialIdx >= 0 && partialIdx < partialHistory.length) {
 					for (const b64 of partialHistory[partialIdx]) {
-						const data = await loadImageData(ctx, b64);
-						gifFrames.push({ data, delay: 100 });
+						const imageData = await loadImageData(ctx, b64);
+						gifFrames.push({ data: imageData, delay: 100 });
 					}
 				}
 			}
-			const data = await loadImageData(ctx, frames[i]);
-			gifFrames.push({ data, delay: 500 });
+			const imageData = await loadImageData(ctx, frames[i]);
+			gifFrames.push({ data: imageData, delay: 500 });
 		}
 
-		const output = await encode({ width: 256, height: 256, frames: gifFrames });
+		const output = await encode({ width: 256, height: 256, frames: gifFrames as any });
 		const blob = new Blob([output], { type: 'image/gif' });
 		const url = URL.createObjectURL(blob);
 		const a = document.createElement('a');
