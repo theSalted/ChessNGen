@@ -6,7 +6,7 @@ and encoding entirely when bootstrapping from the default start position.
 
 Usage:
   python save_startpos_tokens.py
-  python save_startpos_tokens.py --ckpt runs/tokenizer_v2/ckpt_best.pt --out startpos_tokens.npy
+  python save_startpos_tokens.py --ckpt runs/tokenizer_v2/ckpt_best.pt --out weights/startpos_tokens.npy
 """
 
 import argparse
@@ -30,7 +30,7 @@ def main():
     )
     parser.add_argument(
         "--out",
-        default="startpos_tokens.npy",
+        default="weights/startpos_tokens.npy",
         help="output .npy file",
     )
     parser.add_argument(

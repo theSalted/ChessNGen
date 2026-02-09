@@ -64,8 +64,8 @@ def main():
                         help="number of games to skip (already in dataset)")
     parser.add_argument("--num-games", type=int, default=100,
                         help="number of opening sequences to collect")
-    parser.add_argument("--out-tokens", default="opening_tokens.npy")
-    parser.add_argument("--out-moves", default="opening_moves.txt")
+    parser.add_argument("--out-tokens", default="weights/openings/opening_tokens.npy")
+    parser.add_argument("--out-moves", default="weights/openings/opening_moves.txt")
     parser.add_argument(
         "--device",
         default="cuda" if torch.cuda.is_available() else "cpu",

@@ -14,15 +14,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import torch
 import uvicorn
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
 
 from infer import (
     load_dynamics,
     load_vae,
-    bootstrap_startpos,
-    bootstrap_pgn,
+    load_openings,
+    bootstrap_random_opening,
     decode_tokens_to_pil,
     generate_streaming,
     pil_to_base64,
@@ -33,27 +32,19 @@ app = FastAPI()
 dynamics_model = None
 vae_model = None
 device = None
+opening_moves = None  # list of move strings
 
 # Server-side session state
 context = None  # (1024,) tensor on device
 
 
-class InitRequest(BaseModel):
-    mode: str = "startpos"
-    pgn: str = ""
-
-
 @app.post("/api/init")
-def init_game(req: InitRequest):
-    """Bootstrap context and return the k initial frames."""
+def init_game():
+    """Bootstrap context from a random opening and return initial frames + moves."""
     global context
 
-    if req.mode == "pgn":
-        if not req.pgn.strip():
-            raise HTTPException(400, "pgn is required when mode is 'pgn'")
-        context = bootstrap_pgn(vae_model, req.pgn, device)
-    else:
-        context = bootstrap_startpos(device)
+    context, idx = bootstrap_random_opening(device)
+    moves = opening_moves[idx]
 
     k = context.shape[0] // 256
     frames = []
@@ -61,7 +52,7 @@ def init_game(req: InitRequest):
         frame_tokens = context[i * 256 : (i + 1) * 256]
         frames.append(pil_to_base64(decode_tokens_to_pil(vae_model, frame_tokens, device)))
 
-    return {"frames": frames}
+    return {"frames": frames, "opening": moves}
 
 
 @app.get("/api/step")
@@ -96,12 +87,12 @@ def step_game(temperature: float = 0.0, top_k: int = 0):
 
 
 def main():
-    global dynamics_model, vae_model, device
+    global dynamics_model, vae_model, device, opening_moves
 
     parser = argparse.ArgumentParser()
     project_root = Path(__file__).resolve().parent.parent
-    parser.add_argument("--dynamics-ckpt", default=str(project_root / "dynamics_best.pt"))
-    parser.add_argument("--vae-ckpt", default=str(project_root / "tokenizer_best.pt"))
+    parser.add_argument("--dynamics-ckpt", default=str(project_root / "weights" / "dynamics_best.pt"))
+    parser.add_argument("--vae-ckpt", default=str(project_root / "weights" / "tokenizer_best.pt"))
     parser.add_argument("--device", default="mps" if torch.backends.mps.is_available() else "cpu")
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8000)
@@ -111,7 +102,8 @@ def main():
     print(f"Loading models on {device}...")
     vae_model = load_vae(args.vae_ckpt, device)
     dynamics_model = load_dynamics(args.dynamics_ckpt, device)
-    print("Models loaded. Starting server...")
+    _, opening_moves = load_openings()
+    print(f"Models loaded. {len(opening_moves)} openings available. Starting server...")
 
     uvicorn.run(app, host=args.host, port=args.port)
 

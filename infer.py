@@ -64,18 +64,27 @@ def decode_tokens_to_pil(vae: FSQVAE, flat_tokens: torch.Tensor, device: torch.d
     return transforms.ToPILImage()(img)
 
 
-def bootstrap_startpos(device: torch.device, k: int = 4) -> torch.Tensor:
-    """Load pre-computed starting position tokens → (k*256,)."""
+def load_openings() -> tuple:
+    """Load pre-computed opening tokens and moves. Returns (tokens, moves)."""
     import numpy as np
     from pathlib import Path
-    tokens_path = Path(__file__).parent / "startpos_tokens.npy"
-    tokens = np.load(tokens_path)  # (4, 256) uint16
-    t = torch.from_numpy(tokens.astype(np.int64)).reshape(-1).to(device)  # (1024,)
-    # If k != 4, repeat/trim
-    if k != 4:
-        single = t[:256]
-        t = single.repeat(k)
-    return t
+    openings_dir = Path(__file__).parent / "weights" / "openings"
+    tokens = np.load(openings_dir / "opening_tokens.npy")  # (100, 4, 256) uint16
+    moves = []
+    with open(openings_dir / "opening_moves.txt") as f:
+        for line in f:
+            moves.append(line.strip().split(maxsplit=1)[1])  # skip index prefix
+    return tokens, moves
+
+
+def bootstrap_random_opening(device: torch.device) -> tuple[torch.Tensor, int]:
+    """Pick a random opening, return (context_tokens, opening_index)."""
+    import numpy as np
+    import random
+    tokens, _ = load_openings()
+    idx = random.randint(0, len(tokens) - 1)
+    t = torch.from_numpy(tokens[idx].astype(np.int64)).reshape(-1).to(device)  # (1024,)
+    return t, idx
 
 
 def bootstrap_pgn(vae: FSQVAE, pgn_str: str, device: torch.device, k: int = 4) -> torch.Tensor:

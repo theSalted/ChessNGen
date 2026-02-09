@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -15,12 +16,12 @@
 	let showAdvanced = $state(false);
 	let partialFrame = $state<string | null>(null);
 	let includePartials = $state(true);
+	let opening = $state('');
 
-	// Initialize from server-loaded data on mount
-	import { onMount } from 'svelte';
 	onMount(() => {
 		if (data.frames.length > 0) {
 			frames = data.frames;
+			opening = data.opening;
 			currentFrame = frames.length - 1;
 			initialized = true;
 		} else {
@@ -35,13 +36,10 @@
 		currentFrame = 0;
 		initialized = false;
 		partialFrame = null;
+		opening = '';
 
 		try {
-			const res = await fetch('/api/init', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ mode: 'startpos', pgn: '' })
-			});
+			const res = await fetch('/api/init', { method: 'POST' });
 
 			if (!res.ok) {
 				const err = await res.json();
@@ -51,6 +49,7 @@
 
 			const data = await res.json();
 			frames = data.frames;
+			opening = data.opening;
 			currentFrame = frames.length - 1;
 			initialized = true;
 		} catch (e) {
@@ -114,11 +113,9 @@
 		const ctx = canvas.getContext('2d')!;
 
 		const gifFrames = [];
-		// Skip first 3 context frames (duplicates of starting position)
-		for (let i = 3; i < frames.length; i++) {
-			// Insert partial frames before each generated frame
+		for (let i = 0; i < frames.length; i++) {
 			if (includePartials) {
-				const partialIdx = i - 4; // partialHistory[0] corresponds to frames[4]
+				const partialIdx = i - 4;
 				if (partialIdx >= 0 && partialIdx < partialHistory.length) {
 					for (const b64 of partialHistory[partialIdx]) {
 						const imageData = await loadImageData(ctx, b64);
@@ -140,6 +137,8 @@
 		URL.revokeObjectURL(url);
 	}
 
+	let openingMoves = $derived(opening ? opening.split(' ') : []);
+
 	let displaySrc = $derived(
 		stepping && partialFrame
 			? `data:image/png;base64,${partialFrame}`
@@ -147,7 +146,22 @@
 				? `data:image/png;base64,${frames[currentFrame]}`
 				: null
 	);
+
+
 </script>
+
+{#snippet openingCard()}
+	<div class="text-xs font-medium mb-2" style="color: #8a6a4e;">Opening</div>
+	<div class="flex flex-col gap-0.5 text-sm font-mono" style="color: #f0d9b5;">
+		{#each Array(Math.ceil(openingMoves.length / 2)) as _, i}
+			<div class="flex gap-2">
+				<span style="color: #8a6a4e;">{i + 1}.</span>
+				<span class="w-10">{openingMoves[i * 2]}</span>
+				<span class="w-10" style="color: #b58863;">{openingMoves[i * 2 + 1] ?? ''}</span>
+			</div>
+		{/each}
+	</div>
+{/snippet}
 
 <svelte:head>
 	<title>ChessNGen Playground</title>
@@ -155,7 +169,7 @@
 
 <div class="min-h-screen flex flex-col items-center px-4 py-8" style="background: #000; color: #f0d9b5;">
 
-	<!-- Board + Slider -->
+	<!-- Board + Slider (left) + Opening card (right) -->
 	<div class="relative">
 		<div
 			class="w-[512px] h-[512px] rounded-lg flex items-center justify-center overflow-hidden"
@@ -175,8 +189,9 @@
 			{/if}
 		</div>
 
+		<!-- Slider (leading/left edge) -->
 		{#if frames.length > 0}
-			<div class="absolute top-0 -right-12 h-[512px] flex flex-col items-center">
+			<div class="absolute top-0 -left-12 h-[512px] flex flex-col items-center">
 				<div class="flex-1 flex items-center justify-center" style="width: 24px;">
 					<input
 						type="range"
@@ -185,7 +200,7 @@
 						bind:value={currentFrame}
 						disabled={stepping}
 						class="themed-slider disabled:opacity-30"
-						style="width: 512px; transform: rotate(90deg); transform-origin: center center;"
+						style="width: 512px; transform: rotate(-90deg); transform-origin: center center;"
 					/>
 				</div>
 				<span class="text-xs tabular-nums" style="color: #b58863;">
@@ -193,11 +208,17 @@
 				</span>
 			</div>
 		{/if}
+
+		<!-- Opening card (desktop: right edge) -->
+		{#if opening}
+			<div class="absolute top-0 -right-48 w-40 rounded-lg p-3 hidden lg:block" style="background: #1a1210; border: 1px solid #3d2e25;">
+				{@render openingCard()}
+			</div>
+		{/if}
 	</div>
 
-	<!-- Next / Reset / Download -->
+	<!-- Next / Download / Reset -->
 	<div class="mt-4 flex gap-3 w-[512px] items-center">
-		<!-- Next (rounded pill) -->
 		<button
 			onclick={step}
 			disabled={stepping || !initialized}
@@ -216,19 +237,6 @@
 			{/if}
 		</button>
 
-		<!-- Reset (circle) -->
-		<button
-			onclick={init}
-			disabled={loading || stepping}
-			class="w-12 h-12 rounded-full flex items-center justify-center disabled:opacity-50 transition-colors shrink-0"
-			style="background: #b58863; color: #302420;"
-			onmouseenter={(e) => e.currentTarget.style.background = '#a07753'}
-			onmouseleave={(e) => e.currentTarget.style.background = '#b58863'}
-			title="Reset"
-		>
-			<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
-		</button>
-
 		<!-- Download GIF (circle) -->
 		<button
 			onclick={downloadGif}
@@ -241,7 +249,27 @@
 		>
 			<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
 		</button>
+
+		<!-- Reset (circle) -->
+		<button
+			onclick={init}
+			disabled={loading || stepping}
+			class="w-12 h-12 rounded-full flex items-center justify-center disabled:opacity-50 transition-colors shrink-0"
+			style="background: #b58863; color: #302420;"
+			onmouseenter={(e) => e.currentTarget.style.background = '#a07753'}
+			onmouseleave={(e) => e.currentTarget.style.background = '#b58863'}
+			title="Reset"
+		>
+			<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+		</button>
 	</div>
+
+	<!-- Opening card (mobile: below buttons) -->
+	{#if opening}
+		<div class="mt-4 w-[512px] rounded-lg p-3 lg:hidden" style="background: #1a1210; border: 1px solid #3d2e25;">
+			{@render openingCard()}
+		</div>
+	{/if}
 
 	<!-- Advanced -->
 	<div class="mt-6 w-[512px]">
