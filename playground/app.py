@@ -61,7 +61,7 @@ def init_game(req: InitRequest):
             raise HTTPException(400, "pgn is required when mode is 'pgn'")
         context = bootstrap_pgn(vae_model, req.pgn, device)
     else:
-        context = bootstrap_startpos(vae_model, device)
+        context = bootstrap_startpos(device)
 
     k = context.shape[0] // 256
     frames = []

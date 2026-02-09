@@ -26,20 +26,27 @@
  * ```
  */
 declare module '$env/static/private' {
+	export const NVM_RC_VERSION: string;
 	export const CAML_LD_LIBRARY_PATH: string;
 	export const MANPATH: string;
 	export const STARSHIP_SHELL: string;
+	export const NoDefaultCurrentDirectoryInExePath: string;
 	export const GHOSTTY_RESOURCES_DIR: string;
 	export const ZELLIJ: string;
+	export const CLAUDE_CODE_ENTRYPOINT: string;
 	export const TERM_PROGRAM: string;
 	export const NODE: string;
+	export const NVM_CD_FLAGS: string;
 	export const TERM: string;
 	export const SHELL: string;
+	export const HOMEBREW_REPOSITORY: string;
 	export const TMPDIR: string;
 	export const TERM_PROGRAM_VERSION: string;
 	export const OPAM_SWITCH_PREFIX: string;
 	export const npm_config_local_prefix: string;
+	export const GIT_EDITOR: string;
 	export const OCAML_TOPLEVEL_PATH: string;
+	export const NVM_DIR: string;
 	export const USER: string;
 	export const OCAMLTOP_INCLUDE_PATH: string;
 	export const COMMAND_MODE: string;
@@ -48,12 +55,14 @@ declare module '$env/static/private' {
 	export const npm_execpath: string;
 	export const PATH: string;
 	export const npm_package_json: string;
+	export const _: string;
 	export const GHOSTTY_SHELL_FEATURES: string;
 	export const LaunchInstanceID: string;
 	export const __CFBundleIdentifier: string;
 	export const npm_command: string;
 	export const PWD: string;
 	export const npm_lifecycle_event: string;
+	export const OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: string;
 	export const npm_package_name: string;
 	export const LANG: string;
 	export const OPAM_LAST_ENV: string;
@@ -64,20 +73,24 @@ declare module '$env/static/private' {
 	export const HOME: string;
 	export const SHLVL: string;
 	export const TERMINFO: string;
+	export const HOMEBREW_PREFIX: string;
 	export const STARSHIP_SESSION_KEY: string;
 	export const LOGNAME: string;
 	export const npm_lifecycle_script: string;
 	export const XDG_DATA_DIRS: string;
+	export const COREPACK_ENABLE_AUTO_PIN: string;
 	export const GHOSTTY_BIN_DIR: string;
 	export const BUN_INSTALL: string;
 	export const npm_config_user_agent: string;
+	export const INFOPATH: string;
+	export const HOMEBREW_CELLAR: string;
 	export const OPAMNOENVNOTICE: string;
 	export const OSLogRateLimit: string;
+	export const CLAUDECODE: string;
 	export const SECURITYSESSIONID: string;
 	export const npm_node_execpath: string;
 	export const COLORTERM: string;
 	export const ZELLIJ_SESSION_NAME: string;
-	export const _: string;
 	export const NODE_ENV: string;
 }
 
@@ -108,20 +121,27 @@ declare module '$env/static/public' {
  */
 declare module '$env/dynamic/private' {
 	export const env: {
+		NVM_RC_VERSION: string;
 		CAML_LD_LIBRARY_PATH: string;
 		MANPATH: string;
 		STARSHIP_SHELL: string;
+		NoDefaultCurrentDirectoryInExePath: string;
 		GHOSTTY_RESOURCES_DIR: string;
 		ZELLIJ: string;
+		CLAUDE_CODE_ENTRYPOINT: string;
 		TERM_PROGRAM: string;
 		NODE: string;
+		NVM_CD_FLAGS: string;
 		TERM: string;
 		SHELL: string;
+		HOMEBREW_REPOSITORY: string;
 		TMPDIR: string;
 		TERM_PROGRAM_VERSION: string;
 		OPAM_SWITCH_PREFIX: string;
 		npm_config_local_prefix: string;
+		GIT_EDITOR: string;
 		OCAML_TOPLEVEL_PATH: string;
+		NVM_DIR: string;
 		USER: string;
 		OCAMLTOP_INCLUDE_PATH: string;
 		COMMAND_MODE: string;
@@ -130,12 +150,14 @@ declare module '$env/dynamic/private' {
 		npm_execpath: string;
 		PATH: string;
 		npm_package_json: string;
+		_: string;
 		GHOSTTY_SHELL_FEATURES: string;
 		LaunchInstanceID: string;
 		__CFBundleIdentifier: string;
 		npm_command: string;
 		PWD: string;
 		npm_lifecycle_event: string;
+		OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: string;
 		npm_package_name: string;
 		LANG: string;
 		OPAM_LAST_ENV: string;
@@ -146,20 +168,24 @@ declare module '$env/dynamic/private' {
 		HOME: string;
 		SHLVL: string;
 		TERMINFO: string;
+		HOMEBREW_PREFIX: string;
 		STARSHIP_SESSION_KEY: string;
 		LOGNAME: string;
 		npm_lifecycle_script: string;
 		XDG_DATA_DIRS: string;
+		COREPACK_ENABLE_AUTO_PIN: string;
 		GHOSTTY_BIN_DIR: string;
 		BUN_INSTALL: string;
 		npm_config_user_agent: string;
+		INFOPATH: string;
+		HOMEBREW_CELLAR: string;
 		OPAMNOENVNOTICE: string;
 		OSLogRateLimit: string;
+		CLAUDECODE: string;
 		SECURITYSESSIONID: string;
 		npm_node_execpath: string;
 		COLORTERM: string;
 		ZELLIJ_SESSION_NAME: string;
-		_: string;
 		NODE_ENV: string;
 		[key: `PUBLIC_${string}`]: undefined;
 		[key: `${string}`]: string | undefined;

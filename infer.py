@@ -64,12 +64,18 @@ def decode_tokens_to_pil(vae: FSQVAE, flat_tokens: torch.Tensor, device: torch.d
     return transforms.ToPILImage()(img)
 
 
-def bootstrap_startpos(vae: FSQVAE, device: torch.device, k: int = 4) -> torch.Tensor:
-    """Encode the standard chess starting position, repeated k times → (k*256,)."""
-    board = chess.Board()
-    img = render_board(board)
-    tokens = encode_board_image(vae, img, device)  # (256,)
-    return tokens.repeat(k)  # (k*256,)
+def bootstrap_startpos(device: torch.device, k: int = 4) -> torch.Tensor:
+    """Load pre-computed starting position tokens → (k*256,)."""
+    import numpy as np
+    from pathlib import Path
+    tokens_path = Path(__file__).parent / "startpos_tokens.npy"
+    tokens = np.load(tokens_path)  # (4, 256) uint16
+    t = torch.from_numpy(tokens.astype(np.int64)).reshape(-1).to(device)  # (1024,)
+    # If k != 4, repeat/trim
+    if k != 4:
+        single = t[:256]
+        t = single.repeat(k)
+    return t
 
 
 def bootstrap_pgn(vae: FSQVAE, pgn_str: str, device: torch.device, k: int = 4) -> torch.Tensor:
