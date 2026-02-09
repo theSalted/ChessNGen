@@ -11,6 +11,10 @@ version = "0.1.0"
 chess = ">=1.11.2, <2"
 pillow = ">=12.1.0, <13"
 pyarrow = ">=23.0.0, <24"
+torch = ">=2.10.0, <3"
+torchvision = ">=0.25.0, <0.26"
+vector-quantize-pytorch = ">=1.27.20, <2"
+einops = ">=0.8.2, <0.9"
 
 [dependencies]
 python = ">=3.14.3,<3.15"
