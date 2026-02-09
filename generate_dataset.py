@@ -34,6 +34,9 @@ def get_font():
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         "/usr/share/fonts/noto/NotoSansSymbols2-Regular.ttf",
         "/usr/share/fonts/TTF/NotoSansSymbols2-Regular.ttf",
+        # macOS (Homebrew)
+        str(Path.home() / "Library/Fonts/DejaVuSans.ttf"),
+        "/Library/Fonts/DejaVuSans.ttf",
     ]
     for path in font_paths:
         try:
