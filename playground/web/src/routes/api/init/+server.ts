@@ -6,7 +6,7 @@ export const POST: RequestHandler = async ({ request }) => {
 	const body = await request.json();
 	const res = await fetch(`${BACKEND_URL}/api/init`, {
 		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
+		headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' },
 		body: JSON.stringify(body)
 	});
 

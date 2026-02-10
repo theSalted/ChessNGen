@@ -387,10 +387,23 @@
 					style="color: #b58863;"
 					onmouseenter={(e) => e.currentTarget.style.background = '#4a3a2f'}
 					onmouseleave={(e) => e.currentTarget.style.background = 'transparent'}
+					title="Decrease steps"
 				>
 					<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="15,18 9,12 15,6"/></svg>
 				</button>
-				<span class="w-8 text-center text-sm font-medium tabular-nums" style="color: #f0d9b5;">{autoPlaying ? autoRemaining : autoSteps}</span>
+				{#if autoPlaying}
+					<span class="w-12 text-center text-sm font-medium tabular-nums" style="color: #f0d9b5;">{autoRemaining}</span>
+				{:else}
+					<input
+						type="number"
+						min={1}
+						max={500}
+						bind:value={autoSteps}
+						class="w-12 text-center text-sm font-medium tabular-nums bg-transparent border-none outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+						style="color: #f0d9b5;"
+						onblur={(e) => { const v = parseInt(e.currentTarget.value); if (!isNaN(v)) autoSteps = Math.max(1, Math.min(500, v)); }}
+					/>
+				{/if}
 				<button
 					onclick={() => { if (autoSteps < 500) autoSteps++; }}
 					disabled={autoPlaying}
@@ -398,6 +411,7 @@
 					style="color: #b58863;"
 					onmouseenter={(e) => e.currentTarget.style.background = '#4a3a2f'}
 					onmouseleave={(e) => e.currentTarget.style.background = 'transparent'}
+					title="Increase steps"
 				>
 					<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="9,6 15,12 9,18"/></svg>
 				</button>

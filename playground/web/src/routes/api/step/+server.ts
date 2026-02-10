@@ -6,7 +6,9 @@ export const GET: RequestHandler = async ({ url }) => {
 	const top_k = url.searchParams.get('top_k') ?? '0';
 
 	const params = new URLSearchParams({ temperature, top_k });
-	const res = await fetch(`${BACKEND_URL}/api/step?${params}`);
+	const res = await fetch(`${BACKEND_URL}/api/step?${params}`, {
+		headers: { 'ngrok-skip-browser-warning': '1' }
+	});
 
 	return new Response(res.body, {
 		headers: {
