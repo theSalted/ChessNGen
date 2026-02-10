@@ -34,7 +34,7 @@
 				const modelData = await res.json();
 				models = modelData.models;
 				if (models.length > 0 && selectedModel === null) {
-					selectedModel = modelData.active || models[0].id;
+					selectedModel = modelData.active || models[models.length - 1].id;
 				}
 			}
 		} catch {}
