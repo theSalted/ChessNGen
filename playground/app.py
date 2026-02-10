@@ -8,6 +8,7 @@ Usage:
 import argparse
 import json
 import sys
+from dataclasses import dataclass, field
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -16,7 +17,6 @@ import torch
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
-
 from pydantic import BaseModel
 
 from infer import (
@@ -32,58 +32,93 @@ from infer import (
 
 app = FastAPI()
 
-dynamics_model = None
-vae_model = None
-device = None
-opening_moves = None  # list of move strings
 
-# Server-side session state
-context = None  # (1024,) tensor on device
+@dataclass
+class ModelEntry:
+    name: str
+    dynamics_path: str
+    vae_path: str
+    dynamics_model: object = None
+    vae_model: object = None
+
+
+@dataclass
+class ServerState:
+    device: torch.device | None = None
+    default_vae_model: object = None
+    models: dict[str, ModelEntry] = field(default_factory=dict)
+    opening_moves: list[str] = field(default_factory=list)
+    # Session
+    active_model_id: str | None = None
+    context: torch.Tensor | None = None
+
+
+state = ServerState()
 
 
 class InitRequest(BaseModel):
     mode: str = "opening"
+    model_id: str | None = None
+
+
+@app.get("/api/models")
+def list_models():
+    """Return available dynamics models."""
+    models = [
+        {"id": model_id, "name": entry.name}
+        for model_id, entry in state.models.items()
+    ]
+    return {"models": models, "active": state.active_model_id}
 
 
 @app.post("/api/init")
 def init_game(req: InitRequest):
     """Bootstrap context and return initial frames + opening info."""
-    global context
+    # Resolve model
+    model_id = req.model_id
+    if model_id is None:
+        model_id = state.active_model_id or next(iter(state.models))
+    if model_id not in state.models:
+        raise HTTPException(400, f"Unknown model: {model_id}. Available: {list(state.models.keys())}")
+
+    entry = state.models[model_id]
+    state.active_model_id = model_id
+    vae = entry.vae_model
 
     if req.mode == "startpos":
-        context = bootstrap_startpos(device)
+        state.context = bootstrap_startpos(state.device)
         moves = ""
     else:
-        context, idx = bootstrap_random_opening(device)
-        moves = opening_moves[idx]
+        state.context, idx = bootstrap_random_opening(state.device)
+        moves = state.opening_moves[idx]
 
-    k = context.shape[0] // 256
+    k = state.context.shape[0] // 256
     frames = []
     for i in range(k):
-        frame_tokens = context[i * 256 : (i + 1) * 256]
-        frames.append(pil_to_base64(decode_tokens_to_pil(vae_model, frame_tokens, device)))
+        frame_tokens = state.context[i * 256 : (i + 1) * 256]
+        frames.append(pil_to_base64(decode_tokens_to_pil(vae, frame_tokens, state.device)))
 
-    return {"frames": frames, "opening": moves}
+    return {"frames": frames, "opening": moves, "model_id": model_id}
 
 
 @app.get("/api/step")
 def step_game(temperature: float = 0.0, top_k: int = 0):
     """Generate one frame with SSE streaming of partial renders."""
-    global context
-
-    if context is None:
+    if state.context is None or state.active_model_id is None:
         raise HTTPException(400, "No active session. Call /api/init first.")
 
+    entry = state.models[state.active_model_id]
+    dynamics = entry.dynamics_model
+    vae = entry.vae_model
+
     def event_stream():
-        global context
         final_tokens = None
 
         for result, is_final in generate_streaming(
-            dynamics_model, vae_model, context, device,
+            dynamics, vae, state.context, state.device,
             temperature=temperature, top_k=top_k,
         ):
             if is_final is None:
-                # This is the token tensor for context update
                 final_tokens = result
                 continue
 
@@ -92,29 +127,58 @@ def step_game(temperature: float = 0.0, top_k: int = 0):
             yield f"event: {event}\ndata: {json.dumps({'frame': b64})}\n\n"
 
         if final_tokens is not None:
-            context = torch.cat([context[256:], final_tokens])
+            state.context = torch.cat([state.context[256:], final_tokens])
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
-def main():
-    global dynamics_model, vae_model, device, opening_moves
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+W = PROJECT_ROOT / "weights"
 
+# ── Model registry ──────────────────────────────────────────────────
+# (id, display name, dynamics checkpoint, vae checkpoint)
+MODEL_LIST: list[tuple[str, str, Path, Path]] = [
+    ("v1", "v1", W / "dynamics_best.pt", W / "tokenizer_best.pt"),
+    # ("v2", "v2", W / "dynamics_v2.pt",  W / "tokenizer_best.pt"),
+]
+
+
+def main():
     parser = argparse.ArgumentParser()
-    project_root = Path(__file__).resolve().parent.parent
-    parser.add_argument("--dynamics-ckpt", default=str(project_root / "weights" / "dynamics_best.pt"))
-    parser.add_argument("--vae-ckpt", default=str(project_root / "weights" / "tokenizer_best.pt"))
     parser.add_argument("--device", default="mps" if torch.backends.mps.is_available() else "cpu")
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
 
-    device = torch.device(args.device)
-    print(f"Loading models on {device}...")
-    vae_model = load_vae(args.vae_ckpt, device)
-    dynamics_model = load_dynamics(args.dynamics_ckpt, device)
-    _, opening_moves = load_openings()
-    print(f"Models loaded. {len(opening_moves)} openings available. Starting server...")
+    state.device = torch.device(args.device)
+    print(f"Loading models on {state.device}...")
+
+    # Load models, sharing VAEs when paths match
+    loaded_vaes: dict[Path, object] = {}
+    for model_id, name, dyn_path, vae_path in MODEL_LIST:
+        if not dyn_path.exists():
+            print(f"  Skipping '{name}': {dyn_path} not found")
+            continue
+        print(f"  Loading '{name}' from {dyn_path}...")
+        if vae_path not in loaded_vaes:
+            loaded_vaes[vae_path] = load_vae(str(vae_path), state.device)
+        state.models[model_id] = ModelEntry(
+            name=name,
+            dynamics_path=str(dyn_path),
+            vae_path=str(vae_path),
+            dynamics_model=load_dynamics(str(dyn_path), state.device),
+            vae_model=loaded_vaes[vae_path],
+        )
+
+    if not state.models:
+        print("ERROR: No models found.")
+        sys.exit(1)
+
+    # Load openings
+    _, state.opening_moves = load_openings()
+
+    print(f"Loaded {len(state.models)} model(s): {list(state.models.keys())}")
+    print(f"{len(state.opening_moves)} openings available. Starting server...")
 
     uvicorn.run(app, host=args.host, port=args.port)
 

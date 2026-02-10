@@ -18,13 +18,27 @@
 	let partialFrame = $state<string | null>(null);
 	let includePartials = $state(true);
 	let opening = $state('');
+	let models = $state<{id: string, name: string}[]>([]);
+	let selectedModel = $state<string | null>(null);
 	let autoSteps = $state(10);
 	let autoPlaying = $state(false);
 	let stopRequested = $state(false);
 	let looping = $state(true);
 	let loopTimer = $state<ReturnType<typeof setInterval> | null>(null);
 
-	onMount(() => {
+	onMount(async () => {
+		// Fetch available models
+		try {
+			const res = await fetch('/api/models');
+			if (res.ok) {
+				const modelData = await res.json();
+				models = modelData.models;
+				if (models.length > 0 && selectedModel === null) {
+					selectedModel = modelData.active || models[0].id;
+				}
+			}
+		} catch {}
+
 		if (data.frames.length > 0) {
 			frames = data.frames;
 			opening = data.opening;
@@ -49,7 +63,7 @@
 			const res = await fetch('/api/init', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ mode })
+				body: JSON.stringify({ mode, model_id: selectedModel })
 			});
 
 			if (!res.ok) {
@@ -414,6 +428,24 @@
 			{/if}
 		</div>
 	</div>
+
+	<!-- Model selector (only shown when multiple models available) -->
+	{#if models.length > 1}
+		<div class="mt-4 w-[512px]">
+			<div class="text-xs font-medium mb-2" style="color: #8a6a4e;">Model</div>
+			<select
+				bind:value={selectedModel}
+				onchange={() => init()}
+				disabled={loading || stepping}
+				class="w-full rounded-full px-4 py-2 text-sm focus:outline-none focus:ring-1 disabled:opacity-50"
+				style="background: #3d2e25; color: #f0d9b5; border: 1px solid #b58863;"
+			>
+				{#each models as model}
+					<option value={model.id}>{model.name}</option>
+				{/each}
+			</select>
+		</div>
+	{/if}
 
 	<!-- Opening -->
 	<div class="mt-4 w-[512px]">

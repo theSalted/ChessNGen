@@ -27,7 +27,7 @@ export {};
 
 declare module "$app/types" {
 	export interface AppTypes {
-		RouteId(): "/" | "/api" | "/api/init" | "/api/step";
+		RouteId(): "/" | "/api" | "/api/init" | "/api/models" | "/api/step";
 		RouteParams(): {
 			
 		};
@@ -35,9 +35,10 @@ declare module "$app/types" {
 			"/": Record<string, never>;
 			"/api": Record<string, never>;
 			"/api/init": Record<string, never>;
+			"/api/models": Record<string, never>;
 			"/api/step": Record<string, never>
 		};
-		Pathname(): "/" | "/api" | "/api/" | "/api/init" | "/api/init/" | "/api/step" | "/api/step/";
+		Pathname(): "/" | "/api" | "/api/" | "/api/init" | "/api/init/" | "/api/models" | "/api/models/" | "/api/step" | "/api/step/";
 		ResolvedPathname(): `${"" | `/${string}`}${ReturnType<AppTypes['Pathname']>}`;
 		Asset(): "/robots.txt" | string & {};
 	}
