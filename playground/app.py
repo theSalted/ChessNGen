@@ -139,7 +139,7 @@ W = PROJECT_ROOT / "weights"
 # (id, display name, dynamics checkpoint, vae checkpoint)
 MODEL_LIST: list[tuple[str, str, Path, Path]] = [
     ("v1", "v1", W / "dynamics_best.pt", W / "tokenizer_best.pt"),
-    # ("v2", "v2", W / "dynamics_v2.pt",  W / "tokenizer_best.pt"),
+    ("v2", "v2", W / "dynamics_v2.pt",   W / "tokenizer_best.pt"),
 ]
 
 
