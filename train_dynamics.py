@@ -53,15 +53,27 @@ class TransitionsTokenDataset(Dataset):
         mask = [gid in game_ids for gid in all_game_ids]
 
         self.token_files = [table.column("token_file")[i].as_py() for i, m in enumerate(mask) if m]
-        self.in_starts = [table.column("in_start")[i].as_py() for i, m in enumerate(mask) if m]
         self.out_idxs = [table.column("out_idx")[i].as_py() for i, m in enumerate(mask) if m]
         self.k = table.column("k")[0].as_py()
+
+        # Add padded early transitions (t=1..k-1) so the model learns to
+        # handle left-padded context (e.g. startpos repeated 4 times).
+        seen_files = set()
+        for tf in self.token_files:
+            if tf in seen_files:
+                continue
+            seen_files.add(tf)
+            tokens = np.load(data_root / tf)
+            for t in range(1, min(self.k, tokens.shape[0])):
+                self.token_files.append(tf)
+                self.out_idxs.append(t)
 
         # Cache loaded .npy files in memory
         self.data_root = data_root
         self._cache: dict[str, np.ndarray] = {}
 
-        print(f"  {split_file}: {len(self)} transitions from {len(game_ids)} games (k={self.k})")
+        n_padded = len(self.token_files) - sum(mask)
+        print(f"  {split_file}: {len(self)} transitions ({n_padded} padded) from {len(game_ids)} games (k={self.k})")
 
     def _load_tokens(self, token_file: str) -> np.ndarray:
         if token_file not in self._cache:
@@ -73,14 +85,20 @@ class TransitionsTokenDataset(Dataset):
 
     def __getitem__(self, idx):
         tokens = self._load_tokens(self.token_files[idx])  # (T, 16, 16)
-        in_start = self.in_starts[idx]
         out_idx = self.out_idxs[idx]
 
-        # Context: k frames flattened
-        context = tokens[in_start : in_start + self.k].reshape(-1).astype(np.int64)
-        # Target: 1 frame flattened
-        target = tokens[out_idx].reshape(-1).astype(np.int64)
+        # Context: k frames ending at out_idx, left-padded with frame 0
+        n_avail = min(out_idx, self.k)
+        n_pad = self.k - n_avail
 
+        if n_pad > 0:
+            pad = np.tile(tokens[0:1], (n_pad, 1, 1))       # (n_pad, 16, 16)
+            real = tokens[out_idx - n_avail : out_idx]        # (n_avail, 16, 16)
+            context = np.concatenate([pad, real], axis=0).reshape(-1).astype(np.int64)
+        else:
+            context = tokens[out_idx - self.k : out_idx].reshape(-1).astype(np.int64)
+
+        target = tokens[out_idx].reshape(-1).astype(np.int64)
         return torch.from_numpy(context), torch.from_numpy(target)
 
 
@@ -501,10 +519,10 @@ def train(args):
 if __name__ == "__main__":
     p = argparse.ArgumentParser(description="Train dynamics transformer")
     p.add_argument("--data", default="datasets/lichess_1k")
-    p.add_argument("--out-dir", default="runs/dynamics")
+    p.add_argument("--out-dir", default="runs/dynamics_v2.1")
     p.add_argument("--vae-ckpt", default="runs/tokenizer_v2/ckpt_best.pt")
     p.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
-    p.add_argument("--steps", type=int, default=50_000)
+    p.add_argument("--steps", type=int, default=100_000)
     p.add_argument("--batch-size", type=int, default=64)
     p.add_argument("--lr", type=float, default=2e-4)
     p.add_argument("--warmup", type=int, default=2000)
