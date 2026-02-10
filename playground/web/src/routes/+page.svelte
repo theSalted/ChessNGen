@@ -21,7 +21,7 @@
 	let autoSteps = $state(10);
 	let autoPlaying = $state(false);
 	let stopRequested = $state(false);
-	let looping = $state(false);
+	let looping = $state(true);
 	let loopTimer = $state<ReturnType<typeof setInterval> | null>(null);
 
 	onMount(() => {
@@ -30,6 +30,7 @@
 			opening = data.opening;
 			currentFrame = frames.length - 1;
 			initialized = true;
+			resumeLoop();
 		} else {
 			init();
 		}
@@ -62,6 +63,7 @@
 			opening = data.opening;
 			currentFrame = frames.length - 1;
 			initialized = true;
+			resumeLoop();
 		} catch (e) {
 			alert(`Failed to connect to backend: ${e}`);
 		} finally {
@@ -279,6 +281,7 @@
 						min={0}
 						max={frames.length - 1}
 						bind:value={currentFrame}
+						oninput={() => { if (looping) toggleLoop(); }}
 						disabled={stepping}
 						class="themed-slider disabled:opacity-30"
 						style="width: 512px; transform: rotate(90deg); transform-origin: center center;"
