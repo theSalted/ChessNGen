@@ -64,6 +64,15 @@ def decode_tokens_to_pil(vae: FSQVAE, flat_tokens: torch.Tensor, device: torch.d
     return transforms.ToPILImage()(img)
 
 
+def bootstrap_startpos(device: torch.device) -> torch.Tensor:
+    """Load pre-computed starting position tokens (padded) → (4*256,)."""
+    import numpy as np
+    from pathlib import Path
+    tokens_path = Path(__file__).parent / "weights" / "startpos_tokens.npy"
+    tokens = np.load(tokens_path)  # (4, 256) uint16
+    return torch.from_numpy(tokens.astype(np.int64)).reshape(-1).to(device)
+
+
 def load_openings() -> tuple:
     """Load pre-computed opening tokens and moves. Returns (tokens, moves)."""
     import numpy as np

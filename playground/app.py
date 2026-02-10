@@ -17,10 +17,13 @@ import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 
+from pydantic import BaseModel
+
 from infer import (
     load_dynamics,
     load_vae,
     load_openings,
+    bootstrap_startpos,
     bootstrap_random_opening,
     decode_tokens_to_pil,
     generate_streaming,
@@ -38,13 +41,21 @@ opening_moves = None  # list of move strings
 context = None  # (1024,) tensor on device
 
 
+class InitRequest(BaseModel):
+    mode: str = "opening"
+
+
 @app.post("/api/init")
-def init_game():
-    """Bootstrap context from a random opening and return initial frames + moves."""
+def init_game(req: InitRequest):
+    """Bootstrap context and return initial frames + opening info."""
     global context
 
-    context, idx = bootstrap_random_opening(device)
-    moves = opening_moves[idx]
+    if req.mode == "startpos":
+        context = bootstrap_startpos(device)
+        moves = ""
+    else:
+        context, idx = bootstrap_random_opening(device)
+        moves = opening_moves[idx]
 
     k = context.shape[0] // 256
     frames = []

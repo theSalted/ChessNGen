@@ -2,9 +2,12 @@ import { BACKEND_URL } from '$env/static/private';
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 
-export const POST: RequestHandler = async () => {
+export const POST: RequestHandler = async ({ request }) => {
+	const body = await request.json();
 	const res = await fetch(`${BACKEND_URL}/api/init`, {
-		method: 'POST'
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(body)
 	});
 
 	if (!res.ok) {

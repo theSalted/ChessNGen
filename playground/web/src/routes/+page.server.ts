@@ -3,7 +3,9 @@ import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async () => {
 	const res = await fetch(`${BACKEND_URL}/api/init`, {
-		method: 'POST'
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ mode: 'opening' })
 	});
 
 	if (!res.ok) {

@@ -4,6 +4,7 @@
 
 	let { data }: { data: PageData } = $props();
 
+	let mode = $state<'opening' | 'startpos'>('opening');
 	let temperature = $state(0.0);
 	let topK = $state(0);
 
@@ -39,7 +40,11 @@
 		opening = '';
 
 		try {
-			const res = await fetch('/api/init', { method: 'POST' });
+			const res = await fetch('/api/init', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ mode })
+			});
 
 			if (!res.ok) {
 				const err = await res.json();
@@ -279,6 +284,26 @@
 			title="Reset"
 		>
 			<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+		</button>
+	</div>
+
+	<!-- Mode selector -->
+	<div class="mt-3 flex gap-2 w-[512px]">
+		<button
+			class="flex-1 px-3 py-1.5 rounded-full text-sm transition-colors"
+			style="background: {mode === 'opening' ? '#f0d9b5' : '#1a1210'}; color: {mode === 'opening' ? '#302420' : '#8a6a4e'}; border: 1px solid {mode === 'opening' ? '#f0d9b5' : '#3d2e25'};"
+			onclick={() => { mode = 'opening'; init(); }}
+			disabled={loading || stepping}
+		>
+			Random Opening
+		</button>
+		<button
+			class="flex-1 px-3 py-1.5 rounded-full text-sm transition-colors"
+			style="background: {mode === 'startpos' ? '#f0d9b5' : '#1a1210'}; color: {mode === 'startpos' ? '#302420' : '#8a6a4e'}; border: 1px solid {mode === 'startpos' ? '#f0d9b5' : '#3d2e25'};"
+			onclick={() => { mode = 'startpos'; init(); }}
+			disabled={loading || stepping}
+		>
+			Standard Opening
 		</button>
 	</div>
 
