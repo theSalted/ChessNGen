@@ -4,16 +4,17 @@ GPT-style dynamics transformer for chess board state prediction.
 Given k=4 context frames (4 × 256 = 1024 tokens), the model autoregressively
 predicts the next frame (256 tokens) using discrete FSQ-VAE token sequences.
 
-Architecture (~7M params):
-  - d_model=256, n_heads=8, n_layers=8, d_ff=1024
+Architecture (default ~14M params):
+  - d_model=384, n_heads=8, n_layers=8, d_ff=1536
   - Factored positional embeddings: frame + row + col
   - Weight-tied output head
   - Pre-norm GPT-2 style via nn.TransformerEncoder
+  - Change-weighted CE loss: upweights tokens that differ from last context frame
 
 Usage:
   python train_dynamics.py
-  python train_dynamics.py --d-model 384 --n-layers 12
-  python train_dynamics.py --out-dir runs/dynamics --steps 50000
+  python train_dynamics.py --d-model 384 --d-ff 1536 --out-dir runs/dynamics_v2
+  python train_dynamics.py --change-weight 10.0   # more aggressive move weighting
 """
 
 import argparse
@@ -27,6 +28,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 from torchvision.utils import save_image
+from aim import Run as AimRun
 
 from train_tokenizer import FSQVAE, lr_at_step
 
@@ -326,6 +328,16 @@ def train(args):
     ctx_len = k * 256  # 1024
     tgt_len = 256
 
+    # Aim experiment tracking
+    aim_run = AimRun(repo="runs", experiment=out.name)
+    aim_run["hparams"] = {
+        "d_model": args.d_model, "n_heads": args.n_heads, "n_layers": args.n_layers,
+        "d_ff": args.d_ff, "dropout": args.dropout, "vocab_size": args.vocab_size,
+        "lr": args.lr, "batch_size": args.batch_size, "steps": args.steps,
+        "change_weight": args.change_weight, "label_smoothing": args.label_smoothing,
+        "grad_clip": args.grad_clip, "n_params": n_params,
+    }
+
     step = 0
     best_val_loss = float("inf")
 
@@ -356,30 +368,59 @@ def train(args):
                 logits = model(inp)  # (B, 1279, vocab)
                 # Loss only on target positions: logits[1023:1279] → target[0:256]
                 pred_logits = logits[:, ctx_len - 1 :, :]  # (B, 256, vocab)
-                loss = F.cross_entropy(
+
+                # Change-weighted CE loss: upweight tokens that differ from last context frame
+                last_ctx_frame = context[:, -tgt_len:]  # (B, 256)
+                changed = (target != last_ctx_frame).float()
+                weight = 1.0 + (args.change_weight - 1.0) * changed
+
+                loss_per_tok = F.cross_entropy(
                     pred_logits.reshape(-1, args.vocab_size),
                     target.reshape(-1),
+                    reduction="none",
+                    label_smoothing=args.label_smoothing,
                 )
+                loss = (loss_per_tok * weight.reshape(-1)).mean()
 
             opt.zero_grad(set_to_none=True)
             scaler.scale(loss).backward()
+            if args.grad_clip > 0:
+                scaler.unscale_(opt)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), args.grad_clip)
             scaler.step(opt)
             scaler.update()
 
             # Logging
             if step % args.log_every == 0:
                 with torch.no_grad():
-                    acc = (pred_logits.argmax(-1) == target).float().mean().item()
+                    preds = pred_logits.argmax(-1)
+                    correct = (preds == target).float()
+                    acc = correct.mean().item()
+
+                    changed_mask = (target != last_ctx_frame)
+                    n_changed = changed_mask.sum().item()
+                    frac_changed = n_changed / target.numel()
+                    acc_chg = correct[changed_mask].mean().item() if n_changed > 0 else float("nan")
+                    acc_unch = correct[~changed_mask].mean().item() if n_changed < target.numel() else float("nan")
+
                 print(
                     f"step {step:6d} | loss {loss.item():.4f} | "
-                    f"acc {acc:.4f} | lr {lr:.2e}"
+                    f"acc {acc:.4f} | chg {acc_chg:.4f} | unch {acc_unch:.4f} | "
+                    f"chg% {frac_changed:.3f} | lr {lr:.2e}"
                 )
+                aim_run.track(loss.item(), name="loss", step=step, context={"subset": "train"})
+                aim_run.track(acc, name="acc", step=step, context={"subset": "train"})
+                aim_run.track(acc_chg, name="acc_chg", step=step, context={"subset": "train"})
+                aim_run.track(acc_unch, name="acc_unch", step=step, context={"subset": "train"})
+                aim_run.track(frac_changed, name="chg_frac", step=step, context={"subset": "train"})
+                aim_run.track(lr, name="lr", step=step)
 
             # Checkpoint + validation
             if step > 0 and step % args.save_every == 0:
                 model.eval()
                 val_losses = []
                 val_accs = []
+                val_accs_chg = []
                 with torch.no_grad(), torch.amp.autocast("cuda", enabled=use_amp):
                     for i, (vc, vt) in enumerate(val_loader):
                         if i >= 50:
@@ -389,17 +430,36 @@ def train(args):
                         vinp = torch.cat([vc, vt[:, :-1]], dim=1)
                         vlogits = model(vinp)
                         vpred = vlogits[:, ctx_len - 1 :, :]
-                        vloss = F.cross_entropy(
+
+                        # Change-weighted val loss (same as training)
+                        vlast_ctx = vc[:, -tgt_len:]
+                        vchanged = (vt != vlast_ctx).float()
+                        vweight = 1.0 + (args.change_weight - 1.0) * vchanged
+                        vloss_per_tok = F.cross_entropy(
                             vpred.reshape(-1, args.vocab_size),
                             vt.reshape(-1),
+                            reduction="none",
+                            label_smoothing=args.label_smoothing,
                         )
-                        vacc = (vpred.argmax(-1) == vt).float().mean().item()
+                        vloss = (vloss_per_tok * vweight.reshape(-1)).mean()
+
+                        vcorrect = (vpred.argmax(-1) == vt).float()
+                        vacc = vcorrect.mean().item()
+                        vchanged_mask = (vt != vlast_ctx)
+                        vn_chg = vchanged_mask.sum().item()
+                        vacc_chg = vcorrect[vchanged_mask].mean().item() if vn_chg > 0 else float("nan")
+
                         val_losses.append(vloss.item())
                         val_accs.append(vacc)
+                        val_accs_chg.append(vacc_chg)
 
                 val_loss = sum(val_losses) / len(val_losses)
                 val_acc = sum(val_accs) / len(val_accs)
-                print(f"  [val] loss {val_loss:.4f} | acc {val_acc:.4f}")
+                val_acc_chg = sum(x for x in val_accs_chg if x == x) / max(1, sum(1 for x in val_accs_chg if x == x))
+                print(f"  [val] loss {val_loss:.4f} | acc {val_acc:.4f} | chg {val_acc_chg:.4f}")
+                aim_run.track(val_loss, name="loss", step=step, context={"subset": "val"})
+                aim_run.track(val_acc, name="acc", step=step, context={"subset": "val"})
+                aim_run.track(val_acc_chg, name="acc_chg", step=step, context={"subset": "val"})
 
                 # Save checkpoint
                 ckpt_data = {
@@ -434,6 +494,7 @@ def train(args):
         },
         out / "ckpt_final.pt",
     )
+    aim_run.close()
     print(f"Done. {step} steps, output in {out}")
 
 
@@ -448,11 +509,16 @@ if __name__ == "__main__":
     p.add_argument("--lr", type=float, default=2e-4)
     p.add_argument("--warmup", type=int, default=2000)
     p.add_argument("--vocab-size", type=int, default=1000)
-    p.add_argument("--d-model", type=int, default=256)
+    p.add_argument("--d-model", type=int, default=384)
     p.add_argument("--n-heads", type=int, default=8)
     p.add_argument("--n-layers", type=int, default=8)
-    p.add_argument("--d-ff", type=int, default=1024)
+    p.add_argument("--d-ff", type=int, default=1536)
     p.add_argument("--dropout", type=float, default=0.1)
+    p.add_argument("--change-weight", type=float, default=5.0,
+                   help="CE loss multiplier on changed tokens (1.0 = uniform)")
+    p.add_argument("--label-smoothing", type=float, default=0.1)
+    p.add_argument("--grad-clip", type=float, default=1.0,
+                   help="max gradient norm (0 = disabled)")
     p.add_argument("--log-every", type=int, default=100)
     p.add_argument("--save-every", type=int, default=5000)
     p.add_argument("--no-amp", action="store_true")

@@ -17,9 +17,10 @@ vector-quantize-pytorch = ">=1.27.20, <2"
 einops = ">=0.8.2, <0.9"
 fastapi = ">=0.115.0, <1"
 uvicorn = ">=0.34.0, <1"
+aim = ">=3.29, <4"
 
 [system-requirements]
 macos = "14.0"
 
 [dependencies]
-python = ">=3.14.3,<3.15"
+python = ">=3.12,<3.13"
