@@ -146,7 +146,7 @@ MODEL_LIST: list[tuple[str, str, Path, Path]] = [
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--device", default="mps" if torch.backends.mps.is_available() else "cpu")
+    parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
