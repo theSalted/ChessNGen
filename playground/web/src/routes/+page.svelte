@@ -12,7 +12,6 @@
 	let fens = $state<string[]>([]);
 	let partialHistory = $state<string[][]>([]);
 	let currentFrame = $state(0);
-	let positionListEl: HTMLDivElement | undefined = $state();
 	let loading = $state(false);
 	let stepping = $state(false);
 	let initialized = $state(false);
@@ -235,13 +234,6 @@
 
 	let openingMoves = $derived(opening ? opening.split(' ') : []);
 
-	// Auto-scroll position list to keep current frame visible
-	$effect(() => {
-		if (positionListEl && frames.length > 0) {
-			const active = positionListEl.children[currentFrame] as HTMLElement | undefined;
-			active?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
-		}
-	});
 
 </script>
 
@@ -328,27 +320,8 @@
 
 	<!-- FEN display -->
 	{#if fens.length > 0 && fens[currentFrame]}
-		<div class="mt-3 w-[512px] px-3 py-2 rounded-lg font-mono text-xs truncate select-all" style="background: #1a1210; color: #8a6a4e; border: 1px solid #3d2e25;">
+		<div class="mt-3 w-[512px] font-mono text-xs select-all text-center" style="color: #8a6a4e;">
 			{fens[currentFrame]}
-		</div>
-	{/if}
-
-	<!-- Position list -->
-	{#if fens.length > 0}
-		<div
-			bind:this={positionListEl}
-			class="mt-2 w-[512px] flex gap-1.5 overflow-x-auto py-2 px-1 position-list"
-			style="scrollbar-width: thin; scrollbar-color: #3d2e25 transparent;"
-		>
-			{#each fens as fen, i}
-				<button
-					onclick={() => { currentFrame = i; if (looping) toggleLoop(); }}
-					class="shrink-0 px-2.5 py-1 rounded-full text-xs font-mono transition-colors"
-					style="background: {i === currentFrame ? '#f0d9b5' : '#1a1210'}; color: {i === currentFrame ? '#302420' : '#8a6a4e'}; border: 1px solid {i === currentFrame ? '#f0d9b5' : '#3d2e25'};"
-				>
-					{i + 1}
-				</button>
-			{/each}
 		</div>
 	{/if}
 
@@ -611,16 +584,6 @@
 	}
 	.themed-slider::-moz-range-track {
 		height: 10px;
-		background: #3d2e25;
-		border-radius: 3px;
-	}
-	.position-list::-webkit-scrollbar {
-		height: 6px;
-	}
-	.position-list::-webkit-scrollbar-track {
-		background: transparent;
-	}
-	.position-list::-webkit-scrollbar-thumb {
 		background: #3d2e25;
 		border-radius: 3px;
 	}
