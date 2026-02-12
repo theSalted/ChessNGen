@@ -21,6 +21,7 @@ from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 from PIL import Image
 import pyarrow.parquet as pq
+from aim import Run as AimRun
 
 NUM_CLASSES = 13  # empty + 6 white + 6 black
 
@@ -46,7 +47,8 @@ class BoardRecognitionDataset(Dataset):
         img = Image.open(self.images_root / self.filenames[i]).convert("RGB")
         x = self.tf(img)
         # labels: flat list of 64 ints → (8, 8) tensor, rank-major (rank 0 = bottom)
-        y = torch.tensor(self.labels[i], dtype=torch.long).view(8, 8)
+        # flip so row 0 = rank 8 (top of image), matching CNN spatial output
+        y = torch.tensor(self.labels[i], dtype=torch.long).view(8, 8).flip(0)
         return x, y
 
 
@@ -98,14 +100,14 @@ class BoardRecognizer(nn.Module):
 def grid_to_fen(grid) -> str:
     """Convert an 8×8 class-index grid to FEN piece-placement string.
 
-    grid: (8, 8) tensor or nested list, indexed [rank][file] with rank 0 = rank 1 (bottom).
+    grid: (8, 8) tensor or nested list, row 0 = rank 8 (top of board/image).
     """
     rows = []
-    for rank in range(7, -1, -1):  # FEN starts from rank 8 (top)
+    for row in range(8):  # row 0 = rank 8, already FEN order (top to bottom)
         row_str = ""
         empty = 0
         for file in range(8):
-            cls = int(grid[rank][file])
+            cls = int(grid[row][file])
             if cls == 0:
                 empty += 1
             else:
@@ -162,6 +164,18 @@ def train(args):
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, betas=(0.9, 0.95), weight_decay=args.wd)
     scaler = torch.amp.GradScaler("cuda", enabled=use_amp)
 
+    # Aim experiment tracking — separate experiment name from dynamics/tokenizer
+    aim_run = AimRun(repo="runs", experiment="board_recognizer")
+    aim_run["hparams"] = {
+        "model": "BoardRecognizer",
+        "lr": args.lr,
+        "batch_size": args.batch_size,
+        "steps": args.steps,
+        "warmup": args.warmup,
+        "weight_decay": args.wd,
+        "n_params": n_params,
+    }
+
     step = 0
     best_board_acc = 0.0
 
@@ -200,6 +214,10 @@ def train(args):
                     f"step {step:6d} | loss {loss.item():.4f} | "
                     f"sq_acc {sq_acc:.4f} | board_acc {board_acc:.4f} | lr {lr:.2e}"
                 )
+                aim_run.track(loss.item(), name="loss", step=step, context={"subset": "train"})
+                aim_run.track(sq_acc, name="sq_acc", step=step, context={"subset": "train"})
+                aim_run.track(board_acc, name="board_acc", step=step, context={"subset": "train"})
+                aim_run.track(lr, name="lr", step=step)
 
             # validation + checkpoint
             if step > 0 and step % args.save_every == 0:
@@ -220,6 +238,8 @@ def train(args):
                 val_sq_acc = val_sq_correct / (val_total * 64)
                 val_board_acc = val_board_correct / val_total
                 print(f"  [val] sq_acc {val_sq_acc:.4f} | board_acc {val_board_acc:.4f}")
+                aim_run.track(val_sq_acc, name="sq_acc", step=step, context={"subset": "val"})
+                aim_run.track(val_board_acc, name="board_acc", step=step, context={"subset": "val"})
 
                 ckpt = {
                     "step": step,
@@ -242,6 +262,7 @@ def train(args):
         "model": model.state_dict(),
         "opt": opt.state_dict(),
     }, out / "ckpt_final.pt")
+    aim_run.close()
     print(f"Done. {step} steps, output in {out}")
 
 
