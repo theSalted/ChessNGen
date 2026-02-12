@@ -29,6 +29,8 @@ from infer import (
     generate_streaming,
     pil_to_base64,
 )
+from train_board_recognizer import BoardRecognizer, grid_to_fen
+from torchvision import transforms
 
 app = FastAPI()
 
@@ -48,12 +50,24 @@ class ServerState:
     default_vae_model: object = None
     models: dict[str, ModelEntry] = field(default_factory=dict)
     opening_moves: list[str] = field(default_factory=list)
+    recognizer: BoardRecognizer | None = None
     # Session
     active_model_id: str | None = None
     context: torch.Tensor | None = None
 
 
 state = ServerState()
+
+_to_tensor = transforms.ToTensor()
+
+
+def recognize_pil(img) -> str:
+    """Run board recognizer on a PIL image, return FEN piece-placement string."""
+    x = _to_tensor(img.convert("RGB")).unsqueeze(0).to(state.device)
+    with torch.no_grad():
+        logits = state.recognizer(x)
+        preds = logits.argmax(dim=1).squeeze(0)
+    return grid_to_fen(preds)
 
 
 class InitRequest(BaseModel):
@@ -94,11 +108,14 @@ def init_game(req: InitRequest):
 
     k = state.context.shape[0] // 256
     frames = []
+    fens = []
     for i in range(k):
         frame_tokens = state.context[i * 256 : (i + 1) * 256]
-        frames.append(pil_to_base64(decode_tokens_to_pil(vae, frame_tokens, state.device)))
+        pil_img = decode_tokens_to_pil(vae, frame_tokens, state.device)
+        frames.append(pil_to_base64(pil_img))
+        fens.append(recognize_pil(pil_img))
 
-    return {"frames": frames, "opening": moves, "model_id": model_id}
+    return {"frames": frames, "fens": fens, "opening": moves, "model_id": model_id}
 
 
 @app.get("/api/step")
@@ -123,8 +140,11 @@ def step_game(temperature: float = 0.0, top_k: int = 0):
                 continue
 
             b64 = pil_to_base64(result)
-            event = "done" if is_final else "partial"
-            yield f"event: {event}\ndata: {json.dumps({'frame': b64})}\n\n"
+            if is_final:
+                fen = recognize_pil(result)
+                yield f"event: done\ndata: {json.dumps({'frame': b64, 'fen': fen})}\n\n"
+            else:
+                yield f"event: partial\ndata: {json.dumps({'frame': b64})}\n\n"
 
         if final_tokens is not None:
             state.context = torch.cat([state.context[256:], final_tokens])
@@ -174,6 +194,17 @@ def main():
     if not state.models:
         print("ERROR: No models found.")
         sys.exit(1)
+
+    # Load board recognizer
+    recognizer_path = W / "board_recognizer.pt"
+    if recognizer_path.exists():
+        print(f"  Loading board recognizer from {recognizer_path}...")
+        state.recognizer = BoardRecognizer().to(state.device)
+        ckpt = torch.load(str(recognizer_path), map_location=state.device, weights_only=True)
+        state.recognizer.load_state_dict(ckpt["model"])
+        state.recognizer.eval()
+    else:
+        print(f"  WARNING: Board recognizer not found at {recognizer_path}")
 
     # Load openings
     _, state.opening_moves = load_openings()
