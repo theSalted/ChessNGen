@@ -41,7 +41,7 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--image", type=str, help="single image path")
     p.add_argument("--dir", type=str, help="directory of images")
-    p.add_argument("--weights", default="runs/board_recognizer/ckpt_best.pt")
+    p.add_argument("--weights", default="weights/board_recognizer.pt")
     p.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     args = p.parse_args()
 
