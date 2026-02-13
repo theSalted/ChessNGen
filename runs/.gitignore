@@ -1,2 +1,4 @@
 *
 !.gitignore
+!.aim
+!.aim/**
